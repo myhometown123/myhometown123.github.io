@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyHometown123 — Your hometown, found for you</title>
+  <meta name="description" content="Enter your ZIP code and a team of agents finds the locations, contacts, events, history, and vacation spots of your city.">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+</head>
+<body>
+  <header class="site-head">
+    <a class="brand" href="index.html"><span class="pin">📍</span> MyHometown123</a>
+    <nav class="site-nav">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="city.html?city=Springfield&zip=65802&meeting=yes">Example city</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Your hometown, found for you.</h1>
+      <p class="lede">Enter your ZIP code. A master agent convenes five sub-agents every morning at 8:00 AM — they find the <strong>locations</strong>, <strong>contacts</strong>, <strong>events</strong>, <strong>history</strong>, and <strong>vacation spots</strong> worth knowing, and build a page for your city.</p>
+
+      <form class="zip-form" id="zipForm" autocomplete="off">
+        <input type="text" id="zipInput" inputmode="numeric" maxlength="5" placeholder="ZIP code, e.g. 65802" aria-label="ZIP code" required>
+        <button class="btn" type="submit" id="findBtn">Find my city</button>
+      </form>
+      <div class="form-msg" id="formMsg" role="alert"></div>
+
+      <div class="demo-links" aria-label="Demo cities">
+        <span style="align-self:center; font-size:.88rem; color:var(--muted)">Try:</span>
+        <a href="city.html?city=Springfield&zip=65802&meeting=yes">Springfield, MO</a>
+        <a href="city.html?city=Branson&zip=65616&meeting=yes">Branson, MO</a>
+        <a href="city.html?city=Kansas%20City&zip=64101&meeting=yes">Kansas City, MO</a>
+      </div>
+    </section>
+
+    <section class="how" aria-label="How it works">
+      <div class="card">
+        <h3>🗓️ Daily 8 AM meeting</h3>
+        <p class="detail">The master agent convenes the team every day at 8:00 AM, hands out briefs, and signs off on the combined find. Add <span class="kbd">?meeting=yes</span> to any city URL to convene it on demand.</p>
+      </div>
+      <div class="card">
+        <h3>🤖 Five sub-agents</h3>
+        <p class="detail">Locations Scout, Contacts Finder, Events Watcher, History Researcher, and Vacation Planner each bring their specialty to the board.</p>
+      </div>
+      <div class="card">
+        <h3>🛠️ Admin control</h3>
+        <p class="detail">Enable or pause agents, review the meeting log, and tune the schedule on the <a href="admin.html">admin page</a>.</p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      Questions or corrections? Write to <a href="mailto:ckonkol@gmail.com">ckonkol@gmail.com</a>.
+      This is a demo build — findings are generated locally in your browser and never leave it.
+    </footer>
+  </main>
+
+  <script src="assets/js/hm123.js"></script>
+  <script>
+    const form = document.getElementById('zipForm');
+    const input = document.getElementById('zipInput');
+    const msg = document.getElementById('formMsg');
+    const btn = document.getElementById('findBtn');
+
+    input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, 5); });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const zip = input.value.trim();
+      if (!/^\d{5}$/.test(zip)) {
+        msg.textContent = 'Please enter a 5-digit ZIP code.';
+        return;
+      }
+      msg.textContent = 'Looking up city…';
+      btn.disabled = true;
+      const loc = await HM123.resolveZip(zip);
+      btn.disabled = false;
+      if (loc && loc.city) {
+        const q = new URLSearchParams({ city: loc.city, zip, meeting: 'yes' });
+        window.location.href = 'city.html?' + q.toString();
+      } else {
+        msg.innerHTML = 'Couldn\'t resolve that ZIP here (offline?). Head to a city page directly, e.g. <a href="city.html?city=Springfield&zip=' + zip + '&meeting=yes">city.html?city=Springfield&zip=' + zip + '</a>';
+      }
+    });
+  </script>
+</body>
+</html>

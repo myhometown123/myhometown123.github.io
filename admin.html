@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — MyHometown123</title>
+  <meta name="description" content="Manage the agent team, meetings, and logs for MyHometown123.">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+</head>
+<body>
+  <header class="site-head">
+    <a class="brand" href="index.html"><span class="pin">📍</span> MyHometown123</a>
+    <nav class="site-nav">
+      <a href="index.html">Home</a>
+      <a href="city.html?city=Springfield&zip=65802&meeting=yes">Example city</a>
+      <a href="admin.html" aria-current="page">Admin</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="city-head">
+      <div class="crumbs"><a href="index.html">Home</a> / Admin</div>
+      <h1>Admin — agents, meetings & logs</h1>
+      <p class="sub">Manage the agent team, convene meetings, and review the log. State is stored locally in this browser.</p>
+    </section>
+
+    <section class="panel" id="agentsPanel">
+      <h2>Agent team</h2>
+      <p class="desc">The master agent convenes the daily meeting; the five sub-agents do the finding. Disabled agents are skipped (and noted) at meeting time.</p>
+      <div id="agentRows"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Convene a meeting</h2>
+      <p class="desc">Run a live meeting now (same engine as the 8:00 AM run). The test brief below is used.</p>
+      <div class="row">
+        <input type="text" id="testCity" value="Springfield" placeholder="City" style="flex:1; min-width:180px">
+        <button class="btn" id="testMeetBtn">Convene test meeting</button>
+        <span class="kv" id="testStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Meeting log</h2>
+      <p class="desc">Most recent first (last 50 meetings, stored in this browser).</p>
+      <div id="logBox"></div>
+      <div class="row" style="justify-content:flex-end; gap:8px">
+        <button class="btn ghost small" id="exportBtn">⬇ Export JSON</button>
+        <button class="btn ghost small" id="clearBtn" style="color:var(--red); border-color:var(--red)">Clear log</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Settings</h2>
+      <p class="desc">Meeting schedule and the contact address used across the site.</p>
+      <div class="row">
+        <label>Daily meeting time <input type="time" id="cfgTime"></label>
+      </div>
+      <div class="row">
+        <label>Questions & corrections email <input type="email" id="cfgEmail" style="max-width:320px"></label>
+        <button class="btn small" id="cfgSave">Save settings</button>
+      </div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+    <footer class="foot">
+      Contact: <a href="mailto:ckonkol@gmail.com" id="footEmail">ckonkol@gmail.com</a>
+    </footer>
+  </main>
+
+  <script src="assets/js/hm123.js"></script>
+  <script>
+    const toast = document.getElementById('toast');
+    function showToast(t) {
+      toast.textContent = t;
+      toast.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.remove('show'), 2400);
+    }
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    // ---------- agents ----------
+    function renderAgents() {
+      const state = HM123.getAgentState();
+      document.getElementById('agentRows').innerHTML = HM123.AGENTS.map((a) => {
+        const s = state[a.id];
+        return '<div class="row">' +
+          '<label><input type="checkbox" data-agent="' + a.id + '"' + (s.enabled ? ' checked' : '') + '> ' +
+          esc(a.name) + (a.id === 'master' ? ' <span class="chip">lead</span>' : '') + '</label>' +
+          '<span class="kv">' + esc(a.role) + '</span>' +
+          '<span class="kv">Last run: ' + (s.lastRun ? HM123.fmtDateTime(s.lastRun) : '—') + '</span>' +
+          '</div>';
+      }).join('');
+      document.querySelectorAll('[data-agent]').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          HM123.setAgentState(cb.dataset.agent, { enabled: cb.checked });
+          showToast((cb.dataset.agent === 'master' ? 'Master Agent' : 'Agent') + (cb.checked ? ' enabled' : ' paused — will be skipped at meetings'));
+        });
+      });
+    }
+
+    // ---------- logs ----------
+    function renderLogs() {
+      const logs = HM123.getLogs();
+      const box = document.getElementById('logBox');
+      if (!logs.length) {
+        box.innerHTML = '<div class="empty">No meetings logged yet — convene one above.</div>';
+        return;
+      }
+      box.innerHTML = '<table class="logs"><thead><tr>' +
+        '<th>Date</th><th>City</th><th>Agents</th><th>Skipped</th><th>Findings</th><th>Duration</th></tr></thead><tbody>' +
+        logs.map((l) => '<tr>' +
+          '<td>' + esc(HM123.fmtDateTime(l.date)) + '</td>' +
+          '<td>' + esc(l.city) + '</td>' +
+          '<td>' + esc(l.agents.join(', ')) + '</td>' +
+          '<td>' + (l.skipped && l.skipped.length ? esc(l.skipped.join(', ')) : '—') + '</td>' +
+          '<td>' + l.total + '</td>' +
+          '<td>' + (Math.round(l.durationMs / 100) / 10) + 's</td>' +
+          '</tr>').join('') +
+        '</tbody></table>';
+    }
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if (confirm('Clear the meeting log? This only affects this browser.')) {
+        HM123.clearLogs();
+        renderLogs();
+        showToast('Log cleared');
+      }
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const data = { agents: HM123.getAgentState(), config: HM123.getConfig(), logs: HM123.getLogs() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mh123-admin-export.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast('Exported admin state + log');
+    });
+
+    // ---------- test meeting ----------
+    document.getElementById('testMeetBtn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const city = document.getElementById('testCity').value.trim() || 'Springfield';
+      const status = document.getElementById('testStatus');
+      btn.disabled = true;
+      status.textContent = 'Convening…';
+      const res = await HM123.runMeeting(city, undefined, {
+        onEvent: (ev) => {
+          if (ev.type === 'agent') status.textContent = ev.id + ': ' + ev.status;
+        },
+      });
+      btn.disabled = false;
+      status.textContent = 'Done — ' + res.log.total + ' findings';
+      renderAgents();
+      renderLogs();
+      showToast('Test meeting logged for ' + city);
+    });
+
+    // ---------- settings ----------
+    const cfg = HM123.getConfig();
+    document.getElementById('cfgTime').value = cfg.meetingTime;
+    document.getElementById('cfgEmail').value = cfg.email;
+    document.getElementById('footEmail').textContent = cfg.email;
+    document.getElementById('footEmail').href = 'mailto:' + cfg.email;
+
+    document.getElementById('cfgSave').addEventListener('click', () => {
+      const time = document.getElementById('cfgTime').value || '08:00';
+      const email = document.getElementById('cfgEmail').value.trim() || 'ckonkol@gmail.com';
+      HM123.saveConfig({ meetingTime: time, email });
+      document.getElementById('footEmail').textContent = email;
+      document.getElementById('footEmail').href = 'mailto:' + email;
+      showToast('Settings saved');
+    });
+
+    renderAgents();
+    renderLogs();
+  </script>
+</body>
+</html>

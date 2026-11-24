@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyHometown123 — City</title>
+  <meta name="description" content="Findings for your city: locations, contacts, events, history, and vacation spots from the daily 8 AM agent meeting.">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
+</head>
+<body>
+  <header class="site-head">
+    <a class="brand" href="index.html"><span class="pin">📍</span> MyHometown123</a>
+    <nav class="site-nav">
+      <a href="index.html">Home</a>
+      <a href="city.html?city=Springfield&zip=65802&meeting=yes">Example city</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="city-head">
+      <div class="crumbs"><a href="index.html">Home</a> / <span id="crumbCity">city</span></div>
+      <h1 id="cityTitle">City</h1>
+      <p class="sub" id="citySub"></p>
+    </section>
+
+    <div class="section-title">
+      <h2>The 8:00 AM meeting</h2>
+      <div>
+        <a class="btn small ghost" id="replayBtn" href="#" hidden>↺ Replay meeting</a>
+        <button class="btn small" id="runBtn">Convene meeting</button>
+      </div>
+    </div>
+    <div class="agent-board" id="agentBoard" aria-live="polite"></div>
+
+    <div id="resultsWrap" hidden>
+      <div class="section-title">
+        <h2>Today's find</h2>
+        <span class="hint" id="resultsHint"></span>
+      </div>
+      <div id="results"></div>
+    </div>
+
+    <footer class="foot">
+      Correct something or know a better spot? <a href="mailto:ckonkol@gmail.com">ckonkol@gmail.com</a>.
+    </footer>
+  </main>
+
+  <script src="assets/js/hm123.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const city = params.get('city');
+    const zip = params.get('zip');
+
+    const board = document.getElementById('agentBoard');
+    const runBtn = document.getElementById('runBtn');
+    const resultsWrap = document.getElementById('resultsWrap');
+    const resultsEl = document.getElementById('results');
+    const resultsHint = document.getElementById('resultsHint');
+    const replayBtn = document.getElementById('replayBtn');
+
+    const SECTION_META = {
+      locations: { title: '📍 Locations', intro: 'Places worth knowing — diners, markets, shops.' },
+      contacts: { title: '🤝 Contacts', intro: 'People worth calling — chamber, clerk, organizers.' },
+      events: { title: '🎪 Events', intro: "What's on the calendar — fairs, festivals, music." },
+      history: { title: '📜 History', intro: 'The founding story and the years that shaped the town.' },
+      vacation: { title: '🏕️ Vacation spots', intro: 'Cabins, trails, wineries, and day trips.' },
+    };
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    if (!city) {
+      document.getElementById('cityTitle').textContent = 'No city specified';
+      document.getElementById('citySub').innerHTML =
+        'Add a <span class="kbd">?city=Name</span> parameter — e.g. <a href="city.html?city=Springfield&zip=65802&meeting=yes">city.html?city=Springfield</a> — or start from the <a href="index.html">homepage</a> with a ZIP code.';
+      board.style.display = 'none';
+      runBtn.style.display = 'none';
+    } else {
+      document.title = city + ' — MyHometown123';
+      document.getElementById('crumbCity').textContent = city;
+      document.getElementById('cityTitle').textContent = city;
+      document.getElementById('citySub').textContent =
+        (zip ? 'ZIP ' + zip + ' · ' : '') + 'Findings below are produced by the daily 8:00 AM agent meeting.';
+
+      const state = HM123.getAgentState();
+
+      function renderBoard(statuses) {
+        board.innerHTML = HM123.AGENTS.map((a) => {
+          const st = (statuses && statuses[a.id]) || { status: 'idle', note: a.role };
+          const cls = st.status === 'running' ? 'busy' : '';
+          const isMaster = a.id === 'master';
+          return '<div class="agent-row ' + cls + (isMaster ? ' master' : '') + '">' +
+            '<span class="agent-name">' + (isMaster ? '🧠 ' : '🤖 ') + esc(a.name) + '</span>' +
+            '<span class="agent-role">' + esc(st.status === 'idle' ? a.role : (st.note || a.role)) + '</span>' +
+            '<span class="status ' + esc(st.status) + '">' + esc(st.status) + '</span>' +
+            '</div>';
+        }).join('');
+      }
+
+      function renderResults(findings, log) {
+        let html = '';
+        for (const key of Object.keys(SECTION_META)) {
+          const items = findings[key] || [];
+          if (!items.length) continue;
+          html += '<section class="results-section" style="margin-bottom:34px">' +
+            '<h2 style="margin:0 0 4px; font-size:1.25rem">' + SECTION_META[key].title + '</h2>' +
+            '<p class="agent-line">' + esc(SECTION_META[key].intro) + '</p>' +
+            '<div class="grid">' +
+            items.map((it) =>
+              '<div class="card"><h3>' + esc(it.name) + '</h3>' +
+              '<p class="detail">' + esc(it.detail) + '</p>' +
+              '<div class="meta"><span class="chip' + (key === 'history' ? ' amber' : '') + '">' + esc(it.chip || '') + '</span>' +
+              (it.extra ? '<span class="score">' + esc(it.extra) + '</span>' : '') +
+              '</div></div>'
+            ).join('') +
+            '</div></section>';
+        }
+        resultsEl.innerHTML = html;
+        resultsWrap.hidden = false;
+        resultsHint.textContent = 'Meeting of ' + HM123.fmtDateTime(log.date) + ' · ' +
+          log.agents.length + ' agents reported · ' + log.total + ' findings in ' + Math.round(log.durationMs / 10) / 100 + 's';
+        runBtn.hidden = true;
+        replayBtn.hidden = false;
+        resultsWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      async function doMeeting() {
+        runBtn.disabled = true;
+        runBtn.textContent = 'Meeting in progress…';
+        resultsWrap.hidden = true;
+        const statuses = {};
+        HM123.AGENTS.forEach((a) => { statuses[a.id] = { status: 'idle' }; });
+
+        const res = await HM123.runMeeting(city, HM123.getAgentState(), {
+          onEvent: (ev) => {
+            if (ev.type === 'agent') {
+              statuses[ev.id] = { status: ev.status, note: ev.note };
+              renderBoard(statuses);
+            }
+          },
+        });
+        renderResults(res.findings, res.log);
+      }
+
+      runBtn.addEventListener('click', doMeeting);
+      replayBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        runBtn.hidden = false; runBtn.disabled = false; runBtn.textContent = 'Convene meeting';
+        replayBtn.hidden = true;
+        doMeeting();
+      });
+
+      renderBoard();
+      if (params.get('meeting') === 'yes') {
+        // auto-convene the 8 AM meeting on ?meeting=yes
+        doMeeting();
+      }
+    }
+  </script>
+</body>
+</html>

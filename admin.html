@@ -13,7 +13,11 @@
     <a class="brand" href="index.html"><span class="pin">📍</span> MyHometown123</a>
     <nav class="site-nav">
       <a href="index.html">Home</a>
-      <a href="city.html?city=Springfield&zip=65802&meeting=yes">Example city</a>
+      <span class="cities-wrap">
+        <button class="site-nav-link" data-cities-toggle type="button">Cities ▾</button>
+        <div class="cities-menu" data-cities-menu></div>
+      </span>
+      <a href="city.html?city=Springfield&zip=65802">Example city</a>
       <a href="admin.html" aria-current="page">Admin</a>
     </nav>
   </header>
@@ -39,6 +43,17 @@
         <button class="btn" id="testMeetBtn">Convene test meeting</button>
         <span class="kv" id="testStatus"></span>
       </div>
+    </section>
+
+    <section class="panel" id="citiesPanel">
+      <h2>Cities</h2>
+      <p class="desc">Saved cities with direct links. "Today's find" opens the city page; "Meeting" convenes the 8:00 AM run. Adding a city here also saves it to the nav sub-menu.</p>
+      <div class="row">
+        <input type="text" id="addCity" placeholder="Add a city, e.g. Springfield" style="flex:1; min-width:180px">
+        <input type="text" id="addZip" placeholder="ZIP (optional)" inputmode="numeric" maxlength="5" style="width:130px">
+        <button class="btn ghost" id="addCityBtn">Save city</button>
+      </div>
+      <div id="cityMeetingRows" style="margin-top:6px"></div>
     </section>
 
     <section class="panel">
@@ -156,7 +171,41 @@
       status.textContent = 'Done — ' + res.log.total + ' findings';
       renderAgents();
       renderLogs();
-      showToast('Test meeting logged for ' + city);
+      HM123.saveCity(city).then((r) => { if (r.added) showToast('City saved to the nav menu' + (r.emailSent ? ' · emailed ckonkol@gmail.com' : '')); });
+      renderCityMeetings();
+    });
+
+    // ---------- saved cities ----------
+    function renderCityMeetings() {
+      const cities = HM123.getCities();
+      const box = document.getElementById('cityMeetingRows');
+      if (!cities.length) {
+        box.innerHTML = '<div class="empty">No cities saved yet — visit a city page or add one above.</div>';
+        return;
+      }
+      box.innerHTML = cities.map((c) => {
+        const base = HM123.cityUrl(c.city, c.zip);
+        const meetingUrl = base + '&meeting=yes';
+        return '<div class="row">' +
+          '<span style="flex:1; min-width:150px"><strong>' + esc(c.city) + '</strong>' + (c.zip ? ' <span class="kv">· ZIP ' + esc(c.zip) + '</span>' : '') + '</span>' +
+          '<a class="btn ghost small" href="' + base + '">Today&#39;s find</a>' +
+          '<a class="btn small" href="' + meetingUrl + '">Meeting</a>' +
+          '</div>';
+      }).join('');
+    }
+
+    document.getElementById('addCityBtn').addEventListener('click', () => {
+      const city = document.getElementById('addCity').value.trim();
+      const zip = document.getElementById('addZip').value.trim();
+      if (!city) { showToast('Type a city name first'); return; }
+      HM123.saveCity(city, zip).then((r) => {
+        showToast(r.added
+          ? (r.emailSent ? 'Saved · emailed ckonkol@gmail.com' : 'Saved · email not delivered (check activation)')
+          : 'Already saved');
+        document.getElementById('addCity').value = '';
+        document.getElementById('addZip').value = '';
+        renderCityMeetings();
+      });
     });
 
     // ---------- settings ----------
@@ -177,6 +226,7 @@
 
     renderAgents();
     renderLogs();
+    renderCityMeetings();
   </script>
 </body>
 </html>

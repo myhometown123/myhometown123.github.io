@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MyHometown123 — City</title>
-  <meta name="description" content="Findings for your city: locations, contacts, events, history, and vacation spots from the daily 8 AM agent meeting.">
+  <meta name="description" content="Today's find for your city: locations, contacts, events, history, and vacation spots — with addresses, phone, website, and socials.">
   <link rel="stylesheet" href="assets/css/styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>">
 </head>
@@ -13,7 +13,11 @@
     <a class="brand" href="index.html"><span class="pin">📍</span> MyHometown123</a>
     <nav class="site-nav">
       <a href="index.html">Home</a>
-      <a href="city.html?city=Springfield&zip=65802&meeting=yes">Example city</a>
+      <span class="cities-wrap">
+        <button class="site-nav-link" data-cities-toggle type="button">Cities ▾</button>
+        <div class="cities-menu" data-cities-menu></div>
+      </span>
+      <a href="city.html?city=Springfield&zip=65802">Example city</a>
       <a href="admin.html">Admin</a>
     </nav>
   </header>
@@ -25,16 +29,19 @@
       <p class="sub" id="citySub"></p>
     </section>
 
-    <div class="section-title">
-      <h2>The 8:00 AM meeting</h2>
-      <div>
-        <a class="btn small ghost" id="replayBtn" href="#" hidden>↺ Replay meeting</a>
-        <button class="btn small" id="runBtn">Convene meeting</button>
+    <!-- The 8:00 AM meeting board — shown only when ?meeting=yes -->
+    <div id="boardSection" style="display:none">
+      <div class="section-title">
+        <h2>The 8:00 AM meeting</h2>
+        <div>
+          <a class="btn small ghost" id="replayBtn" href="#" hidden>↺ Replay meeting</a>
+          <button class="btn small" id="runBtn">Convene meeting</button>
+        </div>
       </div>
+      <div class="agent-board" id="agentBoard" aria-live="polite"></div>
     </div>
-    <div class="agent-board" id="agentBoard" aria-live="polite"></div>
 
-    <div id="resultsWrap" hidden>
+    <div id="resultsWrap">
       <div class="section-title">
         <h2>Today's find</h2>
         <span class="hint" id="resultsHint"></span>
@@ -43,120 +50,157 @@
     </div>
 
     <footer class="foot">
-      Correct something or know a better spot? <a href="mailto:ckonkol@gmail.com">ckonkol@gmail.com</a>.
+      Know a better spot or a wrong number? <a href="mailto:ckonkol@gmail.com">ckonkol@gmail.com</a>.
+      Contact details shown here are illustrative for this demo.
     </footer>
   </main>
+
+  <div class="toast" id="toast"></div>
 
   <script src="assets/js/hm123.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const city = params.get('city');
     const zip = params.get('zip');
+    const meeting = params.get('meeting') === 'yes';
 
-    const board = document.getElementById('agentBoard');
-    const runBtn = document.getElementById('runBtn');
-    const resultsWrap = document.getElementById('resultsWrap');
-    const resultsEl = document.getElementById('results');
-    const resultsHint = document.getElementById('resultsHint');
-    const replayBtn = document.getElementById('replayBtn');
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const toast = document.getElementById('toast');
+    function showToast(t) {
+      toast.textContent = t;
+      toast.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.remove('show'), 3200);
+    }
 
     const SECTION_META = {
-      locations: { title: '📍 Locations', intro: 'Places worth knowing — diners, markets, shops.' },
+      locations: { title: '📍 Locations', intro: 'Places worth knowing — with address, phone, website, and socials.' },
       contacts: { title: '🤝 Contacts', intro: 'People worth calling — chamber, clerk, organizers.' },
-      events: { title: '🎪 Events', intro: "What's on the calendar — fairs, festivals, music." },
+      events: { title: '🎪 Events', intro: "What's on the calendar — venue, contact, website, and socials." },
       history: { title: '📜 History', intro: 'The founding story and the years that shaped the town.' },
       vacation: { title: '🏕️ Vacation spots', intro: 'Cabins, trails, wineries, and day trips.' },
     };
 
-    function esc(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function renderContact(c) {
+      if (!c) return '';
+      let h = '<div class="contact">';
+      if (c.address) h += '<div class="c-row"><span class="c-ic">📍</span><span class="c-txt">' + esc(c.address) + '</span><a class="map" href="' + c.mapUrl + '" target="_blank" rel="noopener">Map ↗</a></div>';
+      if (c.phone) h += '<div class="c-row"><span class="c-ic">📞</span><a href="' + c.phoneHref + '">' + esc(c.phone) + '</a></div>';
+      if (c.website) {
+        const host = c.website.replace(/^https?:\/\//, '');
+        h += '<div class="c-row"><span class="c-ic">🌐</span><a href="' + c.website + '" target="_blank" rel="noopener">' + esc(host) + '</a></div>';
+      }
+      if (c.social && c.social.length) {
+        h += '<div class="c-row social">' + c.social.map((s) => '<a class="soc" href="' + s.url + '" target="_blank" rel="noopener">' + esc(s.label) + '</a>').join('') + '</div>';
+      }
+      return h + '</div>';
+    }
+
+    function card(it, key) {
+      const amber = key === 'history';
+      return '<div class="card">' +
+        '<h3>' + esc(it.name) + '</h3>' +
+        '<p class="detail">' + esc(it.detail) + '</p>' +
+        renderContact(it.contact) +
+        '<div class="meta"><span class="chip' + (amber ? ' amber' : '') + '">' + esc(it.chip || '') + '</span>' +
+        (it.extra ? '<span class="score">' + esc(it.extra) + '</span>' : '') +
+        '</div></div>';
+    }
+
+    function totalFindings(f) {
+      return ['locations', 'contacts', 'events', 'history', 'vacation'].reduce((n, k) => n + (f[k] ? f[k].length : 0), 0);
+    }
+
+    function renderResults(findings, meta) {
+      let html = '';
+      for (const key of Object.keys(SECTION_META)) {
+        const items = findings[key] || [];
+        if (!items.length) continue;
+        html += '<section class="results-section" style="margin-bottom:34px">' +
+          '<h2 style="margin:0 0 4px; font-size:1.25rem">' + SECTION_META[key].title + '</h2>' +
+          '<p class="agent-line">' + esc(SECTION_META[key].intro) + '</p>' +
+          '<div class="grid">' + items.map((it) => card(it, key)).join('') + '</div>' +
+          '</section>';
+      }
+      document.getElementById('results').innerHTML = html;
+      document.getElementById('resultsHint').textContent = meta.note;
+      document.getElementById('resultsWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     if (!city) {
       document.getElementById('cityTitle').textContent = 'No city specified';
       document.getElementById('citySub').innerHTML =
-        'Add a <span class="kbd">?city=Name</span> parameter — e.g. <a href="city.html?city=Springfield&zip=65802&meeting=yes">city.html?city=Springfield</a> — or start from the <a href="index.html">homepage</a> with a ZIP code.';
-      board.style.display = 'none';
-      runBtn.style.display = 'none';
+        'Add a <span class="kbd">?city=Name</span> parameter — e.g. <a href="city.html?city=Springfield&zip=65802">city.html?city=Springfield</a> — or start from the <a href="index.html">homepage</a> with a ZIP code.';
+      document.getElementById('resultsWrap').style.display = 'none';
     } else {
       document.title = city + ' — MyHometown123';
       document.getElementById('crumbCity').textContent = city;
       document.getElementById('cityTitle').textContent = city;
       document.getElementById('citySub').textContent =
-        (zip ? 'ZIP ' + zip + ' · ' : '') + 'Findings below are produced by the daily 8:00 AM agent meeting.';
+        (zip ? 'ZIP ' + zip + ' · ' : '') + 'Today\'s find: ' + totalFindings(HM123.generateFindings(city)) + ' spots across locations, contacts, events, history, and vacations.';
 
-      const state = HM123.getAgentState();
+      const stateAbbr = HM123.KNOWN_ZIPS[zip] ? HM123.KNOWN_ZIPS[zip].state : undefined;
+      const findings = HM123.generateFindings(city, stateAbbr);
 
-      function renderBoard(statuses) {
-        board.innerHTML = HM123.AGENTS.map((a) => {
-          const st = (statuses && statuses[a.id]) || { status: 'idle', note: a.role };
-          const cls = st.status === 'running' ? 'busy' : '';
-          const isMaster = a.id === 'master';
-          return '<div class="agent-row ' + cls + (isMaster ? ' master' : '') + '">' +
-            '<span class="agent-name">' + (isMaster ? '🧠 ' : '🤖 ') + esc(a.name) + '</span>' +
-            '<span class="agent-role">' + esc(st.status === 'idle' ? a.role : (st.note || a.role)) + '</span>' +
-            '<span class="status ' + esc(st.status) + '">' + esc(st.status) + '</span>' +
-            '</div>';
-        }).join('');
-      }
-
-      function renderResults(findings, log) {
-        let html = '';
-        for (const key of Object.keys(SECTION_META)) {
-          const items = findings[key] || [];
-          if (!items.length) continue;
-          html += '<section class="results-section" style="margin-bottom:34px">' +
-            '<h2 style="margin:0 0 4px; font-size:1.25rem">' + SECTION_META[key].title + '</h2>' +
-            '<p class="agent-line">' + esc(SECTION_META[key].intro) + '</p>' +
-            '<div class="grid">' +
-            items.map((it) =>
-              '<div class="card"><h3>' + esc(it.name) + '</h3>' +
-              '<p class="detail">' + esc(it.detail) + '</p>' +
-              '<div class="meta"><span class="chip' + (key === 'history' ? ' amber' : '') + '">' + esc(it.chip || '') + '</span>' +
-              (it.extra ? '<span class="score">' + esc(it.extra) + '</span>' : '') +
-              '</div></div>'
-            ).join('') +
-            '</div></section>';
-        }
-        resultsEl.innerHTML = html;
-        resultsWrap.hidden = false;
-        resultsHint.textContent = 'Meeting of ' + HM123.fmtDateTime(log.date) + ' · ' +
-          log.agents.length + ' agents reported · ' + log.total + ' findings in ' + Math.round(log.durationMs / 10) / 100 + 's';
-        runBtn.hidden = true;
-        replayBtn.hidden = false;
-        resultsWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-
-      async function doMeeting() {
-        runBtn.disabled = true;
-        runBtn.textContent = 'Meeting in progress…';
-        resultsWrap.hidden = true;
-        const statuses = {};
-        HM123.AGENTS.forEach((a) => { statuses[a.id] = { status: 'idle' }; });
-
-        const res = await HM123.runMeeting(city, HM123.getAgentState(), {
-          onEvent: (ev) => {
-            if (ev.type === 'agent') {
-              statuses[ev.id] = { status: ev.status, note: ev.note };
-              renderBoard(statuses);
-            }
-          },
-        });
-        renderResults(res.findings, res.log);
-      }
-
-      runBtn.addEventListener('click', doMeeting);
-      replayBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        runBtn.hidden = false; runBtn.disabled = false; runBtn.textContent = 'Convene meeting';
-        replayBtn.hidden = true;
-        doMeeting();
+      // Save this city to the "Cities" sub-menu (fires the add-email on first add).
+      HM123.saveCity(city, zip).then((r) => {
+        showToast(r.added
+          ? (r.emailSent ? 'Added to Cities · emailed ckonkol@gmail.com' : 'Added to Cities · email not delivered (check activation)')
+          : 'Already in your Cities menu');
       });
 
-      renderBoard();
-      if (params.get('meeting') === 'yes') {
-        // auto-convene the 8 AM meeting on ?meeting=yes
-        doMeeting();
+      if (meeting) {
+        // ?meeting=yes — show the convening board, then reveal the find.
+        const boardSection = document.getElementById('boardSection');
+        const board = document.getElementById('agentBoard');
+        const runBtn = document.getElementById('runBtn');
+        const replayBtn = document.getElementById('replayBtn');
+        boardSection.style.display = '';
+        document.getElementById('resultsWrap').style.display = 'none';
+
+        const agentState = HM123.getAgentState();
+        function renderBoard(statuses) {
+          board.innerHTML = HM123.AGENTS.map((a) => {
+            const st = (statuses && statuses[a.id]) || { status: 'idle', note: a.role };
+            const cls = st.status === 'running' ? 'busy' : '';
+            const isMaster = a.id === 'master';
+            return '<div class="agent-row ' + cls + (isMaster ? ' master' : '') + '">' +
+              '<span class="agent-name">' + (isMaster ? '🧠 ' : '🤖 ') + esc(a.name) + '</span>' +
+              '<span class="agent-role">' + esc(st.status === 'idle' ? a.role : (st.note || a.role)) + '</span>' +
+              '<span class="status ' + esc(st.status) + '">' + esc(st.status) + '</span></div>';
+          }).join('');
+        }
+
+        async function doMeeting() {
+          runBtn.disabled = true;
+          runBtn.textContent = 'Meeting in progress…';
+          const statuses = {};
+          HM123.AGENTS.forEach((a) => { statuses[a.id] = { status: 'idle' }; });
+          const res = await HM123.runMeeting(city, agentState, {
+            onEvent: (ev) => { if (ev.type === 'agent') { statuses[ev.id] = { status: ev.status, note: ev.note }; renderBoard(statuses); } },
+          });
+          renderBoard(statuses);
+          runBtn.disabled = true;
+          runBtn.textContent = 'Convene meeting';
+          replayBtn.hidden = false;
+          document.getElementById('resultsWrap').style.display = '';
+          renderResults(findings, {
+            note: 'Meeting of ' + HM123.fmtDateTime(res.log.date) + ' · ' + res.log.agents.length +
+              ' agents · ' + res.log.total + ' findings in ' + Math.round(res.log.durationMs / 10) / 100 + 's',
+          });
+        }
+
+        runBtn.addEventListener('click', doMeeting);
+        replayBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          replayBtn.hidden = true;
+          doMeeting();
+        });
+        renderBoard();
+        doMeeting(); // auto-convene on ?meeting=yes
+      } else {
+        document.getElementById('resultsWrap').style.display = '';
+        renderResults(findings, { note: 'Today\'s find · ' + totalFindings(findings) + ' spots · updated daily at 8:00 AM' });
       }
     }
   </script>

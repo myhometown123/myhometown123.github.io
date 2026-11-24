@@ -92,8 +92,43 @@ const HM123 = (() => {
   const VENUES = ['the fairgrounds', 'Main Street', 'riverside park', 'the old square', 'the courthouse steps', 'the bandshell'];
   const ROLES = ['Chamber of Commerce President', 'City Clerk', 'Historical Society Director', 'Public Library Director', 'Tourism Board Member', 'Farmers Market Coordinator'];
 
+  const STREETS = ['Main St', 'Oak Ave', 'Cedar Ln', 'Maple Dr', 'River Rd', 'Hill St', 'Broadway', 'Elm St', 'Church St', 'Depot Ave'];
+  const SOCIALS = [
+    { label: 'Facebook', base: 'https://facebook.com/' },
+    { label: 'Instagram', base: 'https://instagram.com/' },
+    { label: 'X', base: 'https://x.com/' },
+  ];
+
   function slugify(s) {
     return s.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'hometown';
+  }
+
+  // Builds plausible (deterministic) contact info for a place or event:
+  // address + map link, phone, website, and social links "if available".
+  // Phone numbers use the reserved 555 range; links are illustrative.
+  function makeContact(rng, label, city, state, opts) {
+    opts = opts || {};
+    const slugName = slugify(label);
+    let address;
+    if (opts.venue) {
+      address = opts.venue.charAt(0).toUpperCase() + opts.venue.slice(1) + ', ' + city + (state ? ', ' + state : '');
+    } else {
+      address = randInt(rng, 10, 999) + ' ' + pick(rng, STREETS) + ', ' + city + (state ? ', ' + state : '');
+    }
+    const contact = {
+      address,
+      mapUrl: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address),
+      phone: '(' + (opts.area || randInt(rng, 201, 989)) + ') 555-01' + randInt(rng, 10, 99),
+      website: 'https://www.' + slugName + '.com',
+      social: [],
+    };
+    contact.phoneHref = 'tel:' + contact.phone.replace(/[^0-9+]/g, '');
+    if (rng() < 0.6) {
+      const count = randInt(rng, 1, SOCIALS.length);
+      contact.social = SOCIALS.slice().sort(() => rng() - 0.5).slice(0, count)
+        .map((s) => ({ label: s.label, url: s.base + slugName }));
+    }
+    return contact;
   }
 
   function generateFindings(city, state) {
@@ -111,6 +146,7 @@ const HM123 = (() => {
       if (used.has(noun)) continue;
       used.add(noun);
       const name = (rng() < 0.45 ? adj() + ' ' : '') + noun;
+      const contact = makeContact(rng, name, city, state);
       locations.push({
         name,
         chip: pick(rng, LOC_CHIPS),
@@ -121,6 +157,7 @@ const HM123 = (() => {
           'The menu has changed about twice since ' + yearAfter(25) + '. Come as you are.',
           'Ten minutes out of downtown, two minutes too early for the parking lot to be free.',
         ]),
+        contact,
       });
     }
 
@@ -140,12 +177,19 @@ const HM123 = (() => {
       });
     }
 
-    const events = [
-      { name: city + ' Harvest Market', chip: 'Saturdays · autumn', detail: 'Held at ' + pick(rng, VENUES) + '. Bring a tote; produce goes fast after 10 AM.' },
-      { name: adj() + ' Street Fair', chip: 'One weekend · summer', detail: 'Closed ' + pick(rng, ['Main Street', 'the river road', 'the square']) + ' to cars. Free entry; the pie contest is not to be missed.' },
-      { name: 'First Friday Art Walk', chip: 'Monthly · evenings', detail: 'Galleries and porches stay open late along ' + pick(rng, VENUES) + '. Walk, don\'t drive.' },
-      { name: city + ' Bandshell Series', chip: 'Fridays · June–August', detail: 'Doors at 7, first set at 8. The lawn fills by the opening act in July.' },
+    const eventDefs = [
+      { name: city + ' Harvest Market', chip: 'Saturdays · autumn', venue: pick(rng, VENUES), detail: 'Bring a tote; produce goes fast after 10 AM.' },
+      { name: adj() + ' Street Fair', chip: 'One weekend · summer', venue: pick(rng, ['Main Street', 'the river road', 'the square']), detail: 'Free entry; the pie contest is not to be missed.' },
+      { name: 'First Friday Art Walk', chip: 'Monthly · evenings', venue: pick(rng, VENUES), detail: 'Galleries and porches stay open late. Walk, don\'t drive.' },
+      { name: city + ' Bandshell Series', chip: 'Fridays · June–August', venue: 'the bandshell', detail: 'Doors at 7, first set at 8. The lawn fills by the opening act in July.' },
     ];
+    const events = eventDefs.map((e) => ({
+      name: e.name,
+      chip: e.chip,
+      venue: e.venue,
+      detail: 'Held at ' + e.venue + '. ' + e.detail,
+      contact: makeContact(rng, e.name, city, state, { venue: e.venue }),
+    }));
 
     const history = [
       { name: 'Founded in ' + founded, chip: founded + 's', detail: 'Early settlers staked out ' + adj().toLowerCase() + ' Hollow. The first deed is framed in the old courthouse.' },
@@ -254,12 +298,116 @@ const HM123 = (() => {
     return { findings, log };
   }
 
+  // ---------------- saved cities (nav sub-menu) ----------------
+  const CITIES_KEY = 'mh123_cities';
+  const NOTIFY_EMAIL = 'ckonkol@gmail.com';
+  const SITE_BASE = (location.protocol === 'file:' ? '' : location.origin) + location.pathname.replace(/\/[^/]*$/, '');
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function cityUrl(city, zip) {
+    const p = new URLSearchParams();
+    p.set('city', city);
+    if (zip) p.set('zip', zip);
+    return 'city.html?' + p.toString();
+  }
+
+  function getCities() {
+    try { return JSON.parse(localStorage.getItem(CITIES_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+
+  function removeCity(city, zip) {
+    const key = (city || '').toLowerCase() + '|' + (zip || '');
+    const cities = getCities().filter((c) => ((c.city || '').toLowerCase() + '|' + (c.zip || '')) !== key);
+    localStorage.setItem(CITIES_KEY, JSON.stringify(cities));
+    renderCitiesNav();
+  }
+
+  // Saves a city to the "Cities" sub-menu. If it's new, fires the
+  // "city added" email to the configured recipient (best-effort).
+  async function saveCity(city, zip) {
+    city = (city || '').trim();
+    zip = (zip || '').trim();
+    if (!city) return { added: false, emailSent: false };
+    const key = city.toLowerCase() + '|' + zip;
+    const cities = getCities();
+    const exists = cities.some((c) => ((c.city || '').toLowerCase() + '|' + (c.zip || '')) === key);
+    if (!exists) {
+      cities.unshift({ city, zip, added: new Date().toISOString() });
+      localStorage.setItem(CITIES_KEY, JSON.stringify(cities.slice(0, 100)));
+    }
+    renderCitiesNav();
+    if (exists) return { added: false, emailSent: false };
+    const emailSent = await notifyCityAdded(city, zip);
+    return { added: true, emailSent };
+  }
+
+  async function notifyCityAdded(city, zip) {
+    const url = SITE_BASE + '/' + cityUrl(city, zip);
+    try {
+      const r = await fetch('https://formsubmit.co/ajax/' + NOTIFY_EMAIL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          name: 'MyHometown123',
+          subject: 'New city added: ' + city,
+          message: 'A city was added to MyHometown123.\n\nCity: ' + city + (zip ? ' (' + zip + ')' : '') + '\nLink: ' + url,
+          email: NOTIFY_EMAIL,
+        }),
+      });
+      return r.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Renders the "Cities" dropdown in every page's nav (idempotent).
+  function renderCitiesNav() {
+    document.querySelectorAll('[data-cities-menu]').forEach((menu) => {
+      const cities = getCities();
+      if (!cities.length) {
+        menu.innerHTML = '<div class="cities-empty">No cities saved yet.</div>';
+      } else {
+        menu.innerHTML = cities.map((c) => {
+          const href = cityUrl(c.city, c.zip);
+          const title = c.city + (c.zip ? ' (ZIP ' + c.zip + ')' : '');
+          return '<a href="' + href + '" title="' + esc(title) + '">' + esc(c.city) +
+            (c.zip ? ' <span class="muted">· ' + esc(c.zip) + '</span>' : '') + '</a>';
+        }).join('');
+      }
+      const toggle = document.querySelector('[data-cities-toggle]');
+      if (toggle && !toggle._wired) {
+        toggle._wired = true;
+        toggle.addEventListener('click', (e) => { e.preventDefault(); menu.classList.toggle('open'); });
+      }
+    });
+    if (!document._citiesCloseWired) {
+      document._citiesCloseWired = true;
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('.cities-wrap')) return;
+        document.querySelectorAll('[data-cities-menu].open').forEach((m) => m.classList.remove('open'));
+      });
+    }
+  }
+
   return {
     AGENTS, KNOWN_ZIPS,
     resolveZip, generateFindings, runMeeting,
     getAgentState, setAgentState,
     getLogs, addLog, clearLogs,
     getConfig, saveConfig,
-    fmtDateTime, sleep,
+    getCities, saveCity, removeCity, cityUrl,
+    fmtDateTime, sleep, esc,
   };
+})();
+
+// Auto-wire the Cities nav as soon as the DOM is ready (pages load this
+// script at the end of <body>, so this usually runs immediately).
+(function () {
+  const init = () => { if (document.querySelector('[data-cities-menu]')) HM123.renderCitiesNav(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

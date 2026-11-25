@@ -47,9 +47,16 @@
   const match = (item, city, zip) =>
     (item.city || '').toLowerCase() === (city || '').toLowerCase() && (item.zip || '') === (zip || '');
 
+  // The snapshot shape differs across SDK builds: in the compat (UMD) SDK
+  // `snap.exists()` is a METHOD, but in the modular build `exists` is a boolean
+  // GETTER. Handle both so the read works either way. (`snap.data()` is a method in both.)
+  const snapExists = (snap) => (!snap) ? false : (typeof snap.exists === 'function' ? !!snap.exists() : !!snap.exists);
+  const snapData = (snap) => (!snap) ? null : (typeof snap.data === 'function' ? snap.data() : (snap.data || null));
+
   async function listCities() {
     const snap = await LIST_DOC.get();
-    return cleanList(snap.exists() ? (snap.data() || {}).items : []);
+    if (!snapExists(snap)) return [];
+    return cleanList((snapData(snap) || {}).items);
   }
 
   async function saveCity({ city, zip } = {}) {

@@ -36,7 +36,9 @@
 
   const app = firebase.initializeApp(firebaseConfig);
   const db = app.firestore();
-  const LIST_DOC = db.doc('cities', 'list');
+  // Compat (UMD) SDK: db.doc() takes ONE path string, not the modular (col, doc) form.
+  // A two-argument call drops the second segment ("cities has 1").
+  const LIST_DOC = db.doc('cities/list');
 
   const norm = (c) => (typeof c === 'string')
     ? { city: c, zip: '' }

@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { sendCityEmail } = require('./lib/send');
+const { listCities, addCity, removeCity } = require('./lib/cities');
 
 // optional .env loader (no dependency; real env vars win)
 (function loadEnv() {
@@ -53,29 +54,64 @@ function send(res, status, obj) {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(obj));
 }
 
-const server = http.createServer((req, res) => {
+function readBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > MAX_BODY) req.destroy(); });
+    req.on('end', () => resolve(body));
+    req.on('error', () => resolve(''));
+  });
+}
+
+const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { send(res, 204, {}); return; }
 
-  if (req.method === 'GET') {
-    return send(res, 200, { ok: true, service: 'myhometown123-email-relay', configured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASSWORD) });
+  let pathName = '/';
+  try { pathName = new URL(req.url, 'http://localhost').pathname; } catch (e) { /* keep '/' */ }
+
+  // ----- /cities (Postgres-backed) -----
+  if (pathName === '/cities') {
+    try {
+      if (req.method === 'GET') {
+        return send(res, 200, { ok: true, cities: await listCities() });
+      }
+      if (req.method === 'POST') {
+        const data = JSON.parse(await readBody(req) || '{}');
+        return send(res, 200, { ok: true, ...(await addCity(data)) });
+      }
+      if (req.method === 'DELETE') {
+        const data = JSON.parse(await readBody(req) || '{}');
+        return send(res, 200, { ok: true, ...(await removeCity(data)) });
+      }
+      return send(res, 405, { ok: false, error: 'Use GET, POST, or DELETE /cities' });
+    } catch (e) {
+      console.error('[relay] cities failed:', e.message);
+      return send(res, e.statusCode || 500, { ok: false, error: e.message });
+    }
   }
 
-  if (req.method !== 'POST') { send(res, 405, { ok: false, error: 'Use POST /email' }); return; }
-  if (rateLimited()) { send(res, 429, { ok: false, error: 'Rate limited — try again later.' }); return; }
+  // ----- GET / (health) -----
+  if (req.method === 'GET') {
+    return send(res, 200, {
+      ok: true,
+      service: 'myhometown123-relay',
+      emailConfigured: Boolean(process.env.SMTP_USER && process.env.SMTP_PASSWORD),
+      dbConfigured: Boolean(process.env.DATABASE_URL),
+    });
+  }
 
-  let body = '';
-  req.on('data', (c) => { body += c; if (body.length > MAX_BODY) req.destroy(); });
-  req.on('end', async () => {
+  // ----- POST /email (Gmail) -----
+  if (req.method === 'POST' && (pathName === '/email' || pathName === '/')) {
+    if (rateLimited()) { send(res, 429, { ok: false, error: 'Rate limited — try again later.' }); return; }
     let data;
-    try { data = JSON.parse(body || '{}'); }
+    try { data = JSON.parse(await readBody(req) || '{}'); }
     catch (e) { return send(res, 400, { ok: false, error: 'Invalid JSON' }); }
-
     try {
       const city = await sendCityEmail(data);
       return send(res, 200, { ok: true, city });
@@ -83,10 +119,13 @@ const server = http.createServer((req, res) => {
       console.error('[relay] send failed:', e.message);
       return send(res, e.statusCode || 502, { ok: false, error: e.message });
     }
-  });
+  }
+
+  send(res, 405, { ok: false, error: 'Unknown method/path' });
 });
 
 server.listen(PORT, () => {
-  console.log('[relay] MyHometown123 email relay listening on :' + PORT);
+  console.log('[relay] MyHometown123 relay (email + cities) listening on :' + PORT);
   console.log('[relay] sender=' + (process.env.SMTP_USER || '(unset)') + ' recipient=' + (process.env.RECIPIENT || process.env.SMTP_USER || '(unset)'));
+  console.log('[relay] cities db=' + (process.env.DATABASE_URL ? 'configured' : '(unset — /cities will 500)'));
 });

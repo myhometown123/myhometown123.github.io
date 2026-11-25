@@ -319,35 +319,106 @@ const HM123 = (() => {
     return 'city.html?' + p.toString();
   }
 
+  // ---------------- cities: shared Postgres list + local offline cache ----------------
+  // The saved-cities list lives in the relay's Postgres (Vercel Postgres/Neon) so it
+  // follows you across PCs/devices. localStorage is an offline cache + instant-render
+  // fallback. When the relay is reachable, it is authoritative.
+  let CITIES_CACHE = null;    // last list fetched from the relay
+  let CITIES_LOADED = false;  // true once a fetch succeeded (or the relay is disabled)
+
+  function normalizeCity(c) {
+    if (!c) return null;
+    if (typeof c === 'string') return { city: c, zip: '' };
+    return { city: (c.city || '').trim(), zip: (c.zip || '').trim() };
+  }
+  function sameCity(a, city, zip) {
+    return (a.city || '').toLowerCase() === (city || '').toLowerCase() && (a.zip || '') === (zip || '');
+  }
+  function getCitiesLocal() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(CITIES_KEY) || '[]') || [];
+      return arr.map(normalizeCity).filter((c) => c && c.city);
+    } catch (e) { return []; }
+  }
+  function setCitiesLocal(arr) {
+    try { localStorage.setItem(CITIES_KEY, JSON.stringify((arr || []).slice(0, 100))); } catch (e) { /* ignore */ }
+  }
+  function setCitiesCache(arr) {
+    CITIES_CACHE = (arr || []).map(normalizeCity).filter((c) => c && c.city);
+    CITIES_LOADED = true;
+    setCitiesLocal(CITIES_CACHE);
+  }
+
+  // Synchronous best-available: the relay-backed cache if loaded, else the local cache.
   function getCities() {
-    try { return JSON.parse(localStorage.getItem(CITIES_KEY) || '[]'); }
-    catch (e) { return []; }
+    return (CITIES_LOADED && CITIES_CACHE) ? CITIES_CACHE : getCitiesLocal();
+  }
+
+  // Fetch the authoritative list from the relay; fall back to local if offline/down.
+  async function loadCities() {
+    if (!RELAY_URL) { CITIES_LOADED = false; CITIES_CACHE = null; return getCitiesLocal(); }
+    try {
+      const r = await fetch(RELAY_URL.replace(/\/$/, '') + '/cities', { headers: { 'Accept': 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok && Array.isArray(j.cities)) {
+        setCitiesCache(j.cities);
+        renderCitiesNav();
+        return getCities();
+      }
+      throw new Error('bad /cities response');
+    } catch (e) {
+      CITIES_LOADED = false; CITIES_CACHE = null; // offline → keep the local cache as-is
+      return getCitiesLocal();
+    }
   }
 
   function removeCity(city, zip) {
-    const key = (city || '').toLowerCase() + '|' + (zip || '');
-    const cities = getCities().filter((c) => ((c.city || '').toLowerCase() + '|' + (c.zip || '')) !== key);
-    localStorage.setItem(CITIES_KEY, JSON.stringify(cities));
+    const arr = getCities().filter((c) => !sameCity(c, city, zip));
+    setCitiesCache(arr);
     renderCitiesNav();
+    if (RELAY_URL) {
+      fetch(RELAY_URL.replace(/\/$/, '') + '/cities', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city, zip: zip || '' }),
+      }).catch(() => {}); // best-effort; the local cache is already updated
+    }
   }
 
-  // Saves a city to the "Cities" sub-menu. If it's new, fires the
-  // "city added" email to the configured recipient (best-effort).
+  // Saves a city to the shared "Cities" list. The relay (Postgres) decides whether it
+  // is new; if so we fire the "city added" email. Works offline (local cache only).
   async function saveCity(city, zip) {
     city = (city || '').trim();
     zip = (zip || '').trim();
-    if (!city) return { added: false, emailSent: false };
-    const key = city.toLowerCase() + '|' + zip;
-    const cities = getCities();
-    const exists = cities.some((c) => ((c.city || '').toLowerCase() + '|' + (c.zip || '')) === key);
-    if (!exists) {
-      cities.unshift({ city, zip, added: new Date().toISOString() });
-      localStorage.setItem(CITIES_KEY, JSON.stringify(cities.slice(0, 100)));
-    }
+    if (!city) return { added: false, emailSent: false, city, zip };
+
+    // Optimistic: update the local cache instantly so the nav reflects it now.
+    const local = getCitiesLocal();
+    const notLocal = !local.some((c) => sameCity(c, city, zip));
+    if (notLocal) local.unshift({ city, zip, added: new Date().toISOString() });
+    setCitiesLocal(local.slice(0, 100));
+    if (CITIES_LOADED) CITIES_CACHE = getCitiesLocal(); // keep the cache in step
     renderCitiesNav();
-    if (exists) return { added: false, emailSent: false };
-    const emailSent = await notifyCityAdded(city, zip);
-    return { added: true, emailSent };
+
+    // Authoritative: persist to the relay's Postgres; it reports whether it's new.
+    let added = notLocal; // offline fallback
+    if (RELAY_URL) {
+      try {
+        const r = await fetch(RELAY_URL.replace(/\/$/, '') + '/cities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ city, zip: zip || '' }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) {
+          added = !!j.added;
+          if (Array.isArray(j.cities)) { setCitiesCache(j.cities); renderCitiesNav(); }
+        }
+      } catch (e) { /* offline — keep the optimistic local result */ }
+    }
+
+    const emailSent = added ? await notifyCityAdded(city, zip) : false;
+    return { added, emailSent, city, zip };
   }
 
   // Always-working fallback: opens the visitor's own email app, pre-filled,
@@ -411,7 +482,7 @@ const HM123 = (() => {
     getAgentState, setAgentState,
     getLogs, addLog, clearLogs,
     getConfig, saveConfig,
-    getCities, saveCity, removeCity, cityUrl, notifyMailto, renderCitiesNav,
+    getCities, loadCities, saveCity, removeCity, cityUrl, notifyMailto, renderCitiesNav,
     fmtDateTime, sleep, esc,
   };
 })();
@@ -419,7 +490,12 @@ const HM123 = (() => {
 // Auto-wire the Cities nav as soon as the DOM is ready (pages load this
 // script at the end of <body>, so this usually runs immediately).
 (function () {
-  const init = () => { if (document.querySelector('[data-cities-menu]')) HM123.renderCitiesNav(); };
+  const init = () => {
+    if (!document.querySelector('[data-cities-menu]')) return;
+    // Pull the shared (Postgres-backed) list first, then paint the nav. Falls back
+    // to the local cache automatically if the relay is offline.
+    HM123.loadCities().then(() => HM123.renderCitiesNav());
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

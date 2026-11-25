@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-25
+
+### Added
+- **Cross-device saved-cities list** — the "Cities" list now lives in a small **Postgres** database (Vercel Postgres / Neon) behind the relay, so a city you save on one PC/device shows up on every other. New relay endpoints: `GET/POST/DELETE /cities` (JSON), shared DB layer in `relay/lib/db.js` + `relay/lib/cities.js`, and the Vercel function `relay/api/cities.js`.
+- **Offline fallback** — when the relay is unreachable, the site still works, using the browser's `localStorage` as a local cache; it syncs back to the database automatically once the relay is reachable.
+
+### Changed
+- **Site cities persistence** (`assets/js/hm123.js`) — `getCities()` now returns the shared (DB-backed) list, a new `loadCities()` fetches it on page load, and `saveCity`/`removeCity` persist through the relay's `/cities` (the DB decides whether a city is "new" for the add-email). `localStorage` is now a cache + offline fallback, not the source of truth.
+
+### Notes
+- Requires enabling **Vercel Postgres** on the relay project (this sets `DATABASE_URL`) and a re-deploy — see `relay/README.md` §2b. Until it's enabled, the site gracefully falls back to per-device `localStorage` and keeps working.
+
 ## [1.5.0] - 2026-11-25
 
 ### Added

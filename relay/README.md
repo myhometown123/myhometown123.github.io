@@ -1,4 +1,4 @@
-# MyHometown123 — Gmail SMTP relay (Vercel)
+# MyHometown123 — relay (Vercel): Gmail email + shared saved-cities list
 
 The public site is **static (GitHub Pages)** and a browser can't open a raw SMTP
 socket, so the site's JS **POSTs a "city added" event** to this relay, and the relay
@@ -7,11 +7,19 @@ sends a **real Gmail email** via [nodemailer](https://nodemailer.com/).
 The Gmail **App Password stays in a Vercel environment variable** — never in the
 browser, never in the public repo.
 
+The relay also serves the **shared saved-cities list** so it follows you across
+PCs/devices: it reads/writes **Vercel Postgres (Neon)** through a small JSON API
+(`GET/POST/DELETE /cities`). The `DATABASE_URL` connection string stays in Vercel
+too — never in the browser, never in the public repo.
+
 ## Layout
 
 - `api/email.js` — the **Vercel function**: `POST /email { city, zip?, link? }`
+- `api/cities.js` — the **Vercel function**: `GET/POST/DELETE /cities` (the shared saved-cities list)
 - `lib/send.js` — the shared Gmail/nodemailer sending code
-- `server.js` — optional plain-Node server (same code, for local testing or Render/Railway/Fly)
+- `lib/cities.js` — shared cities logic (input validation + query)
+- `lib/db.js` — Postgres access for the `cities` table; connection from `DATABASE_URL`
+- `server.js` — optional plain-Node server (same endpoints, for local testing or Render/Railway/Fly)
 - `.env.example` — example local config
 
 ## 1) Create a Gmail App Password (one time)
@@ -47,6 +55,22 @@ vercel env add RECIPIENT        # optional
 vercel --prod
 ```
 
+## 2b) Enable Vercel Postgres — shared saved-cities list (recommended)
+
+This is what makes the "Cities" list survive switching PCs/devices (it lives in the
+database instead of each browser's `localStorage`).
+
+1. In the relay project: **Settings → Databases → Vercel Postgres → New** (or
+   [Neon](https://neon.tech) directly). Pick a name; it's free-tier.
+2. Vercel creates a **`DATABASE_URL`** environment variable for the project
+   (Production + Preview). That's the only setup needed — the relay's `pg` client
+   reads it. (For Neon, use the **pooled** connection string — Vercel does this by default.)
+3. **Re-deploy** the relay (so `pg` from `package.json` is installed and the new
+   function is live). The relay auto-creates the `cities` table on first use.
+
+> The `cities` table is tiny and auto-managed. You never store credentials or
+> sensitive data in it — only `{city, zip}` pairs the site has saved.
+
 ## 3) Point the site at the relay
 
 In `assets/js/hm123.js`, set `RELAY_URL` to your **function base URL** (no trailing
@@ -69,6 +93,21 @@ curl -X POST https://your-project.vercel.app/email \
 ```
 Expect `{"ok":true,"city":"Springfield"}` and a Gmail email. `400` = missing `city`,
 `500` = env vars not set, `502` = Gmail rejected the send (wrong password / no 2FA).
+
+### Test the cities list (Postgres)
+
+```bash
+# list
+curl https://your-project.vercel.app/cities
+# add (note: "added" is true only the FIRST time you add the same city+zip)
+curl -X POST https://your-project.vercel.app/cities \
+  -H "Content-Type: application/json" -d '{"city":"Springfield","zip":"65802"}'
+# remove
+curl -X DELETE https://your-project.vercel.app/cities \
+  -H "Content-Type: application/json" -d '{"city":"Springfield","zip":"65802"}'
+```
+`GET` → `{"ok":true,"cities":[{"city":"Springfield","zip":"65802"}]}`.
+`POST` → `{"ok":true,"added":true,...,"cities":[...]}`. `500` = `DATABASE_URL` not set.
 
 ## Local (no Vercel needed)
 

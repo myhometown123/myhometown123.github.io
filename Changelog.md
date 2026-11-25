@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-25
+
+### Added
+- **Firebase Cloud Firestore as the cross-device "Cities" store** — the saved-cities list now reads/writes **Cloud Firestore directly from the browser** (`assets/js/firebase-client.js`), so a city saved on one PC/device shows up on every other **with no server deploy required**. The Firebase web config (not a secret) is pasted into `assets/js/firebase-client.js`.
+
+### Changed
+- **Cities persistence backend** (`assets/js/hm123.js`) — `loadCities`/`saveCity`/`removeCity` now use the Firebase client (`window.HM123DB`) when present, falling back to the browser's `localStorage` when Firebase isn't configured or is offline. The relay's `/cities` (Postgres) path is retired.
+- **`index.html` / `city.html` / `admin.html`** — load the two Firebase `*-compat` SDK scripts and `firebase-client.js` before `hm123.js`.
+- **Email on new city is unchanged** — still delivered via the Vercel relay's `/email` endpoint (which works), independent of where cities are stored.
+
+### Notes
+- Setup: create a Firebase project, enable **Cloud Firestore** (production mode), add a **Web app**, paste its `firebaseConfig` into `assets/js/firebase-client.js`, and set the Firestore rule to allow read/write on `/cities`. **No Vercel deploy is needed for this feature.**
+- Until the config is pasted, the site automatically uses per-browser `localStorage` and keeps working (a warning is logged to the console).
+- Firestore rules `allow read, write` on `/cities` are open by design (the list is a public, low-value list of city names). Lock it down with Firebase Auth later if you want stricter write control.
+
 ## [1.6.0] - 2026-11-25
 
 ### Added

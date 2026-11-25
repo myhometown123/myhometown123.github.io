@@ -308,6 +308,12 @@ const HM123 = (() => {
   // Leave '' to disable the automatic email — the "📧 Notify ckonkol" button still works.
   const RELAY_URL = 'https://myhometown123githubio.vercel.app'; // deployed relay — base URL, the code appends '/email' (no trailing slash)
 
+  // Cross-device "Cities" backend. assets/js/firebase-client.js exposes window.HM123DB
+  // (Cloud Firestore, read/write straight from the browser — no server deploy needed)
+  // when a valid config is present. If it isn't, CITIES_API is null and the site falls
+  // back to this browser's localStorage. (The relay's old /cities Postgres path is retired.)
+  const CITIES_API = (typeof HM123DB !== 'undefined' && HM123DB) ? HM123DB : null;
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -319,12 +325,13 @@ const HM123 = (() => {
     return 'city.html?' + p.toString();
   }
 
-  // ---------------- cities: shared Postgres list + local offline cache ----------------
-  // The saved-cities list lives in the relay's Postgres (Vercel Postgres/Neon) so it
-  // follows you across PCs/devices. localStorage is an offline cache + instant-render
-  // fallback. When the relay is reachable, it is authoritative.
-  let CITIES_CACHE = null;    // last list fetched from the relay
-  let CITIES_LOADED = false;  // true once a fetch succeeded (or the relay is disabled)
+  // ---------------- cities: shared Cloud Firestore list + local offline cache ----------------
+  // The saved-cities list lives in Cloud Firestore (via assets/js/firebase-client.js)
+  // so it follows you across PCs/devices — reads/writes happen in the browser, no server.
+  // localStorage is an offline cache + instant-render fallback. When Firestore is
+  // reachable, it is authoritative.
+  let CITIES_CACHE = null;    // last list fetched from Firestore
+  let CITIES_LOADED = false;  // true once a load succeeded
 
   function normalizeCity(c) {
     if (!c) return null;
@@ -349,44 +356,36 @@ const HM123 = (() => {
     setCitiesLocal(CITIES_CACHE);
   }
 
-  // Synchronous best-available: the relay-backed cache if loaded, else the local cache.
+  // Synchronous best-available: the Firestore-backed cache if loaded, else the local cache.
   function getCities() {
     return (CITIES_LOADED && CITIES_CACHE) ? CITIES_CACHE : getCitiesLocal();
   }
 
-  // Fetch the authoritative list from the relay; fall back to local if offline/down.
+  // Load the shared list from Cloud Firestore; fall back to local if offline/unconfigured.
   async function loadCities() {
-    if (!RELAY_URL) { CITIES_LOADED = false; CITIES_CACHE = null; return getCitiesLocal(); }
-    try {
-      const r = await fetch(RELAY_URL.replace(/\/$/, '') + '/cities', { headers: { 'Accept': 'application/json' } });
-      const j = await r.json().catch(() => ({}));
-      if (r.ok && j.ok && Array.isArray(j.cities)) {
-        setCitiesCache(j.cities);
+    if (CITIES_API) {
+      try {
+        const list = await CITIES_API.listCities();
+        setCitiesCache(list);
         renderCitiesNav();
         return getCities();
-      }
-      throw new Error('bad /cities response');
-    } catch (e) {
-      CITIES_LOADED = false; CITIES_CACHE = null; // offline → keep the local cache as-is
-      return getCitiesLocal();
+      } catch (e) { /* offline or config missing → fall back below */ }
     }
+    CITIES_LOADED = false; CITIES_CACHE = null; // keep the local cache as-is
+    return getCitiesLocal();
   }
 
   function removeCity(city, zip) {
     const arr = getCities().filter((c) => !sameCity(c, city, zip));
     setCitiesCache(arr);
     renderCitiesNav();
-    if (RELAY_URL) {
-      fetch(RELAY_URL.replace(/\/$/, '') + '/cities', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city, zip: zip || '' }),
-      }).catch(() => {}); // best-effort; the local cache is already updated
+    if (CITIES_API) {
+      CITIES_API.removeCity({ city, zip: zip || '' }).catch(() => {}); // best-effort; cache already updated
     }
   }
 
-  // Saves a city to the shared "Cities" list. The relay (Postgres) decides whether it
-  // is new; if so we fire the "city added" email. Works offline (local cache only).
+  // Saves a city to the shared "Cities" list (Cloud Firestore). Firestore decides
+  // whether it's new; if so we fire the "city added" email. Works offline (local cache).
   async function saveCity(city, zip) {
     city = (city || '').trim();
     zip = (zip || '').trim();
@@ -400,20 +399,13 @@ const HM123 = (() => {
     if (CITIES_LOADED) CITIES_CACHE = getCitiesLocal(); // keep the cache in step
     renderCitiesNav();
 
-    // Authoritative: persist to the relay's Postgres; it reports whether it's new.
-    let added = notLocal; // offline fallback
-    if (RELAY_URL) {
+    // Authoritative: persist to Cloud Firestore; it reports whether it's new.
+    let added = notLocal; // offline/unconfigured fallback
+    if (CITIES_API) {
       try {
-        const r = await fetch(RELAY_URL.replace(/\/$/, '') + '/cities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ city, zip: zip || '' }),
-        });
-        const j = await r.json().catch(() => ({}));
-        if (r.ok && j.ok) {
-          added = !!j.added;
-          if (Array.isArray(j.cities)) { setCitiesCache(j.cities); renderCitiesNav(); }
-        }
+        const r = await CITIES_API.saveCity({ city, zip: zip || '' });
+        added = !!(r && r.added);
+        if (r && Array.isArray(r.cities)) { setCitiesCache(r.cities); renderCitiesNav(); }
       } catch (e) { /* offline — keep the optimistic local result */ }
     }
 

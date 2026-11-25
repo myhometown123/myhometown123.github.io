@@ -190,6 +190,7 @@
           '<span style="flex:1; min-width:150px"><strong>' + esc(c.city) + '</strong>' + (c.zip ? ' <span class="kv">· ZIP ' + esc(c.zip) + '</span>' : '') + '</span>' +
           '<a class="btn ghost small" href="' + base + '">Today&#39;s find</a>' +
           '<a class="btn small" href="' + meetingUrl + '">Meeting</a>' +
+          '<a class="btn ghost small" href="' + HM123.notifyMailto(c.city, c.zip) + '">📧 Notify ckonkol</a>' +
           '</div>';
       }).join('');
     }
@@ -200,7 +201,7 @@
       if (!city) { showToast('Type a city name first'); return; }
       HM123.saveCity(city, zip).then((r) => {
         showToast(r.added
-          ? (r.emailSent ? 'Saved · emailed ckonkol@gmail.com' : 'Saved · email not delivered (check activation)')
+          ? (r.emailSent ? 'Saved · emailed ckonkol@gmail.com' : 'Saved · use the "📧 Notify ckonkol" link to email (auto-email not yet activated)')
           : 'Already saved');
         document.getElementById('addCity').value = '';
         document.getElementById('addZip').value = '';

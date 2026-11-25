@@ -345,6 +345,14 @@ const HM123 = (() => {
     return { added: true, emailSent };
   }
 
+  // Always-working fallback: opens the visitor's own email app, pre-filled,
+  // addressed to the configured recipient. No third party or activation needed.
+  function notifyMailto(city, zip) {
+    const subject = 'New city added to MyHometown123: ' + city;
+    const body = 'City: ' + city + (zip ? ' (' + zip + ')' : '') + '\nLink: ' + SITE_BASE + '/' + cityUrl(city, zip);
+    return 'mailto:' + NOTIFY_EMAIL + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+
   async function notifyCityAdded(city, zip) {
     const url = SITE_BASE + '/' + cityUrl(city, zip);
     try {
@@ -399,7 +407,7 @@ const HM123 = (() => {
     getAgentState, setAgentState,
     getLogs, addLog, clearLogs,
     getConfig, saveConfig,
-    getCities, saveCity, removeCity, cityUrl,
+    getCities, saveCity, removeCity, cityUrl, notifyMailto,
     fmtDateTime, sleep, esc,
   };
 })();

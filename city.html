@@ -25,7 +25,10 @@
   <main class="wrap">
     <section class="city-head">
       <div class="crumbs"><a href="index.html">Home</a> / <span id="crumbCity">city</span></div>
-      <h1 id="cityTitle">City</h1>
+      <div class="city-title-row">
+        <h1 id="cityTitle">City</h1>
+        <a class="btn small ghost" id="notifyBtn" href="#" hidden>📧 Notify ckonkol@gmail.com</a>
+      </div>
       <p class="sub" id="citySub"></p>
     </section>
 
@@ -139,13 +142,18 @@
       document.getElementById('citySub').textContent =
         (zip ? 'ZIP ' + zip + ' · ' : '') + 'Today\'s find: ' + totalFindings(HM123.generateFindings(city)) + ' spots across locations, contacts, events, history, and vacations.';
 
+      // Always-working "Notify ckonkol" — opens the visitor's email app pre-filled.
+      const notifyBtn = document.getElementById('notifyBtn');
+      notifyBtn.href = HM123.notifyMailto(city, zip);
+      notifyBtn.hidden = false;
+
       const stateAbbr = HM123.KNOWN_ZIPS[zip] ? HM123.KNOWN_ZIPS[zip].state : undefined;
       const findings = HM123.generateFindings(city, stateAbbr);
 
       // Save this city to the "Cities" sub-menu (fires the add-email on first add).
       HM123.saveCity(city, zip).then((r) => {
         showToast(r.added
-          ? (r.emailSent ? 'Added to Cities · emailed ckonkol@gmail.com' : 'Added to Cities · email not delivered (check activation)')
+          ? (r.emailSent ? 'Added to Cities · emailed ckonkol@gmail.com' : 'Added to Cities · use the "📧 Notify ckonkol" button to email (auto-email not yet activated)')
           : 'Already in your Cities menu');
       });
 

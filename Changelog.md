@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-24
+
+### Added
+- **"📧 Notify ckonkol" button** — an always-working email path that opens the visitor's own mail app pre-filled (subject + city + page link) to `ckonkol@gmail.com`. No third party, no activation needed.
+  - Shown in the **city page header** on every city.
+  - Shown as a per-city **Notify** link in the **Admin → Cities** panel.
+
+### Notes
+- This is the reliable fallback for the "email when a city is added" feature: it works even while the [FormSubmit.co](https://formsubmit.co) **AJAX form** activation is pending.
+- To enable the automatic (in-browser, no mail client) email, click the **latest "Activate Form"** link in the email FormSubmit sent to `ckonkol@gmail.com` (the AJAX endpoint `formsubmit.co/ajax/ckonkol@gmail.com` is separate from the one-time "Email Link" and needs its own activation).
+
 ## [1.1.0] - 2026-11-24
 
 ### Added

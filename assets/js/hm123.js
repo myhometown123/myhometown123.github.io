@@ -199,10 +199,10 @@ const HM123 = (() => {
     ];
 
     const vacation = [
-      { name: city + ' Lake Cabins', chip: 'Overnight', extra: randInt(rng, 35, 90) + ' min drive', detail: 'Paddle out before the tour boats arrive. Sunset from the east dock is the move.' },
-      { name: adj() + ' Trail', chip: 'Hike', extra: randInt(rng, 3, 9) + '.2 mi loop', detail: 'One long, honest climb and a waterfall that shows up if the spring is wet. Water at the trailhead, none after.' },
-      { name: 'Overlook at ' + adj() + ' Bluff', chip: 'Bucket list', extra: randInt(rng, 20, 70) + ' min drive', detail: 'Arrive at golden hour and stay an hour longer than you planned. No facilities — pack out, pack in.' },
-      { name: city + ' Winery & Orchard', chip: 'Day trip', extra: 'Tues–Sun', detail: 'Cider, orchard snacks, and a tractor you can ride. Kids under 12 get a free apple-press ticket.' },
+      { name: city + ' Lake Cabins', chip: 'Overnight', extra: randInt(rng, 35, 90) + ' min drive', detail: 'Paddle out before the tour boats arrive. Sunset from the east dock is the move.', contact: makeContact(rng, 'lake-cabins', city, state) },
+      { name: adj() + ' Trail', chip: 'Hike', extra: randInt(rng, 3, 9) + '.2 mi loop', detail: 'One long, honest climb and a waterfall that shows up if the spring is wet. Water at the trailhead, none after.', contact: makeContact(rng, 'hiking-trail', city, state) },
+      { name: 'Overlook at ' + adj() + ' Bluff', chip: 'Bucket list', extra: randInt(rng, 20, 70) + ' min drive', detail: 'Arrive at golden hour and stay an hour longer than you planned. No facilities — pack out, pack in.', contact: makeContact(rng, 'bluff-overlook', city, state) },
+      { name: city + ' Winery & Orchard', chip: 'Day trip', extra: 'Tues–Sun', detail: 'Cider, orchard snacks, and a tractor you can ride. Kids under 12 get a free apple-press ticket.', contact: makeContact(rng, 'winery-orchard', city, state) },
     ];
 
     return { locations, contacts, events, history, vacation, founded };

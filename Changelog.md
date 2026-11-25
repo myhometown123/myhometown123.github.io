@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-25
+
+### Added
+- **Contact info on Vacation spots** — each spot now shows address + a Google **Map** link, phone, website, and social links (matching Locations and Events).
+
+### Removed
+- **"Example city" nav link** from the site navigation (homepage, city, and admin pages).
+
 ## [1.4.0] - 2026-11-25
 
 ### Fixed

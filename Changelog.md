@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-24
+
+### Added
+- **Gmail SMTP relay** (`relay/`) — a Vercel serverless function (nodemailer) that the site calls when a city is added. It sends a real Gmail email and keeps the Gmail **App Password in a Vercel env var**, never in the public site. (Also runnable as a plain Node server for local testing.)
+  - `POST /email` `{ city, zip?, link? }` → sends the notification; CORS enabled. Shared send logic in `relay/lib/send.js`.
+
+### Changed
+- **Automatic "city added" email** now goes through the relay (real Gmail SMTP on Vercel) instead of FormSubmit.co. The site's JS POSTs to `RELAY_URL + /email`; a browser can't open a raw SMTP socket, so the relay does the sending.
+- Set `RELAY_URL` in `assets/js/hm123.js` to your Vercel function base URL (e.g. `https://<project>.vercel.app`) to enable it (leave `''` to use only the **📧 Notify ckonkol** button, which still works with no backend).
+
+### Notes
+- The relay is a separate Vercel deployment (not served by GitHub Pages). Create a Gmail **App Password** (requires 2-Step Verification) and set `SMTP_USER` / `SMTP_PASSWORD` in Vercel — see `relay/README.md`.
+- The **📧 Notify ckonkol** button (from 1.2.0) remains as the always-working, no-backend fallback.
+
 ## [1.2.0] - 2026-11-24
 
 ### Added

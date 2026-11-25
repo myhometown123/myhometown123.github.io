@@ -303,6 +303,11 @@ const HM123 = (() => {
   const NOTIFY_EMAIL = 'ckonkol@gmail.com';
   const SITE_BASE = (location.protocol === 'file:' ? '' : location.origin) + location.pathname.replace(/\/[^/]*$/, '');
 
+  // Gmail SMTP relay base URL (see relay/README.md). The browser can't open a raw
+  // SMTP socket, so the site POSTs "city added" here and the relay sends via Gmail.
+  // Leave '' to disable the automatic email — the "📧 Notify ckonkol" button still works.
+  const RELAY_URL = ''; // e.g. 'https://myhometown123-relay.vercel.app'  (no trailing /email)
+
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -353,20 +358,19 @@ const HM123 = (() => {
     return 'mailto:' + NOTIFY_EMAIL + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
   }
 
+  // Sends the "city added" event to the Gmail SMTP relay (relay/server.js), which
+  // delivers it with nodemailer. Returns true only if the relay reports success.
   async function notifyCityAdded(city, zip) {
+    if (!RELAY_URL) return false; // not configured → rely on the "Notify ckonkol" button
     const url = SITE_BASE + '/' + cityUrl(city, zip);
     try {
-      const r = await fetch('https://formsubmit.co/ajax/' + NOTIFY_EMAIL, {
+      const r = await fetch(RELAY_URL.replace(/\/$/, '') + '/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          name: 'MyHometown123',
-          subject: 'New city added: ' + city,
-          message: 'A city was added to MyHometown123.\n\nCity: ' + city + (zip ? ' (' + zip + ')' : '') + '\nLink: ' + url,
-          email: NOTIFY_EMAIL,
-        }),
+        body: JSON.stringify({ city, zip: zip || '', link: url }),
       });
-      return r.ok;
+      const j = await r.json().catch(() => ({}));
+      return !!(r.ok && j.ok);
     } catch (e) {
       return false;
     }

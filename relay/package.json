@@ -1,0 +1,16 @@
+{
+  "name": "myhometown123-email-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny Gmail SMTP relay for MyHometown123. Receives a 'city added' event and sends a Gmail email. Deploy to any Node host; the App Password stays in an env var, never in the public site.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.13"
+  }
+}

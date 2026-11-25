@@ -306,7 +306,7 @@ const HM123 = (() => {
   // Gmail SMTP relay base URL (see relay/README.md). The browser can't open a raw
   // SMTP socket, so the site POSTs "city added" here and the relay sends via Gmail.
   // Leave '' to disable the automatic email — the "📧 Notify ckonkol" button still works.
-  const RELAY_URL = ''; // e.g. 'https://myhometown123-relay.vercel.app'  (no trailing /email)
+  const RELAY_URL = 'https://myhometown123githubio.vercel.app'; // deployed relay — base URL, the code appends '/email' (no trailing slash)
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -411,7 +411,7 @@ const HM123 = (() => {
     getAgentState, setAgentState,
     getLogs, addLog, clearLogs,
     getConfig, saveConfig,
-    getCities, saveCity, removeCity, cityUrl, notifyMailto,
+    getCities, saveCity, removeCity, cityUrl, notifyMailto, renderCitiesNav,
     fmtDateTime, sleep, esc,
   };
 })();

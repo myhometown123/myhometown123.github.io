@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-25
+
+### Fixed
+- **Site crash on every page** — `Uncaught TypeError: HM123.renderCitiesNav is not a function` at load. `renderCitiesNav()` was defined inside the engine but never added to the `HM123` export object, so the auto-wire that renders the **Cities ▾** nav threw and the dropdown never appeared (and broke the page). It's now exported.
+
+### Changed
+- **Site wired to the live relay** — `RELAY_URL` in `assets/js/hm123.js` is now set to the deployed Vercel relay `https://myhometown123githubio.vercel.app`. Saving a brand-new city sends a real Gmail "city added" email via `POST …/email` (verified live: `200 {"ok":true,"city":…}`, `configured:true`). The **📧 Notify ckonkol** button remains the always-working, no-backend fallback.
+
 ## [1.3.0] - 2026-11-24
 
 ### Added

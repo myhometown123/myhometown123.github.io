@@ -59,8 +59,12 @@
     const before = await listCities();
     const added = !before.some((c) => match(c, city, zip));
     const item = { city, zip };
-    await LIST_DOC.set({ items: firebase.firestore.FieldValue.arrayUnion([item]) }, { merge: true });
-    return { added, city, zip, cities: added ? [item].concat(before) : before };
+    // Plain read-modify-write (no FieldValue.arrayUnion transform). This uses only
+    // DocumentReference.set(), the exact operation proven to work over the REST API,
+    // and avoids depending on the compat SDK exposing `firebase.firestore.FieldValue`.
+    const next = added ? [item].concat(before) : before;
+    await LIST_DOC.set({ items: next }, { merge: true });
+    return { added, city, zip, cities: next };
   }
 
   async function removeCity({ city, zip } = {}) {
@@ -70,7 +74,8 @@
     const current = await listCities();
     const target = current.find((c) => match(c, city, zip));
     if (target) {
-      await LIST_DOC.set({ items: firebase.firestore.FieldValue.arrayRemove([target]) }, { merge: true });
+      const next = current.filter((c) => !match(c, city, zip));
+      await LIST_DOC.set({ items: next }, { merge: true });
     }
     return { removed: !!target, city, zip, cities: current.filter((c) => !match(c, city, zip)) };
   }

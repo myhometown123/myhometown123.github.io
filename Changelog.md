@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-25
+
+### Fixed
+- **"Cities" not saving to Firebase** — the browser write used `firebase.firestore.FieldValue.arrayUnion(...)` / `arrayRemove(...)`, but that reference isn't exposed the way the modular SDK has it in the Firebase **compat (UMD)** SDK, so `saveCity` threw and the error was **silently swallowed** by the engine's offline `catch`. The site showed "Added to Cities" but nothing reached Firestore (the console stayed empty while reads worked). `saveCity`/`removeCity` in `assets/js/firebase-client.js` now use a plain read-modify-write `DocumentReference.set()` — the exact operation verified working against the live project over the Firestore REST API — and `assets/js/hm123.js` now logs write failures to the console instead of hiding them.
+
 ## [1.7.0] - 2026-11-25
 
 ### Added

@@ -406,7 +406,7 @@ const HM123 = (() => {
         const r = await CITIES_API.saveCity({ city, zip: zip || '' });
         added = !!(r && r.added);
         if (r && Array.isArray(r.cities)) { setCitiesCache(r.cities); renderCitiesNav(); }
-      } catch (e) { /* offline — keep the optimistic local result */ }
+      } catch (e) { console.error('[hm123] cities save to Firebase failed:', (e && e.message) ? e.message : e); /* keep the optimistic local result */ }
     }
 
     const emailSent = added ? await notifyCityAdded(city, zip) : false;
